@@ -1,0 +1,1111 @@
+---
+title: "CKME 136 Capstone Forest Fires"
+output:
+  word_document: default
+  html_document: default
+  df_print: paged
+  rows.print: 25
+---
+1 Load packages.
+
+
+```{r echo=TRUE}
+
+#Make sure to use libraries below
+library(dplyr)
+#install.packages("ggplot2")
+library(ggplot2)
+#install.packages("ggpubr")
+library(ggpubr)
+#install.packages("tidyr")
+library(tidyr)
+#install.packages("scales")
+library(scales)
+#install.packages("wesanderson")
+#library(wesanderson)
+#install.packages("viridis")  # Install
+library("viridis")           # Load
+#theme_set(theme_pubclean())
+library("ggrepel")
+#install.packages("janitor")
+library(janitor)
+#install.packages("formattable")
+#library(formattable)
+#install.packages("DT")
+#library(DT)
+#install.packages("FSelector")
+library(FSelector)
+#??FSelector
+
+```
+2. Read the "fores fire .csv" file from the following website.
+
+
+```{r echo=TRUE}
+
+fires <-read.csv('CKME 136 Forest Fire Data.csv',header=T)
+
+```
+
+3. Have a look at the data set. View(train.data)
+
+```{r echo=TRUE}
+
+# Fires
+
+head(fires)
+tail(fires)
+str(fires)
+
+# Check data types of attributes
+sapply(fires, class)
+sapply(fires, typeof)
+
+```
+4. Extract relevant columns.
+
+
+```{r echo=TRUE}
+
+# Fires
+
+new_fire <- fires[, c("Cause", "Jurisdiction", "Number", "Protection.zone", "Response.category", "Year")]
+#new_fire
+
+```
+
+5. Check for missing values.
+
+```{r echo=TRUE}
+
+# Fire
+
+sum(is.na(new_fire$Cause) == TRUE) # 0 Missing values.
+length(new_fire$Cause)
+
+sum(is.na(new_fire$Jurisdiction) == TRUE) # 0 Missing values.
+length(new_fire$Jurisdiction)
+
+sum(is.na(new_fire$Number) == TRUE) # 8352 initial missing values for "Number" field. 
+length(new_fire$Number)
+
+sum(is.na(new_fire$Protection.zone) == TRUE) # 0 Missing values.
+length(new_fire$Protection.zone)
+
+sum(is.na(new_fire$Response.category) == TRUE) # 0 Missing values.
+length(new_fire$Response.category)
+
+sum(is.na(new_fire$Year) == TRUE) # 0 Missing values.
+length(new_fire$Year)
+
+```
+
+6. Only "Number" has missing rows.  Remove all rows with missing values.
+
+
+```{r echo=TRUE}
+
+# Fires
+
+# Remove remaining records with missing values.
+FireClean <- new_fire[complete.cases(new_fire),]
+
+nrow(FireClean) #11519 rows remaining
+
+```
+
+7. Check attributes after missing rows have been removed.
+
+
+```{r echo=TRUE}
+
+# Fire
+
+attach(FireClean)
+
+head(FireClean)
+tail(FireClean)
+str(FireClean)
+dim(FireClean) # 11519 rows, 6 columns
+
+# Check data types of attributes
+sapply(FireClean, class)
+
+
+levels(FireClean$Cause)
+levels(FireClean$Jurisdiction)
+levels(FireClean$Protection.zone)
+levels(FireClean$Response.category)
+levels(FireClean$Year)
+summary(FireClean) # Only the "number" attribute maybe usefull with the summary
+
+```
+
+8. Shorten "Jurisdiction" name
+
+```{r echo=TRUE}
+
+FireClean$Juris_Long <- FireClean$Jurisdiction # Duplicate Jurisdiction column
+
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "British Columbia"] <- "BC"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Alberta"] <- "AB"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "National parks"] <- "NP"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Northwest Territories"] <- "NT"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Prince Edward Island"] <- "PE"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Yukon"] <- "YT"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "New Brunswick"] <- "NB"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Nova Scotia"] <- "NS"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Quebec"] <- "QC"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Manitoba"] <- "MB"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Newfoundland and Labrador"] <- "NL"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Ontario"] <- "ON"
+levels(FireClean$Jurisdiction)[levels(FireClean$Jurisdiction) == "Saskatchewan"] <- "SK"
+levels(FireClean$Jurisdiction)
+
+```
+9. create new column: Cause_Grouped  People vs Lightning
+
+```{r echo=TRUE}
+
+FireClean <- FireClean %>%
+  mutate(Cause_Grouped = case_when(
+    Cause == "Lightning"  ~ "Lightning",
+    TRUE                 ~ "People"
+    )
+  )
+
+```
+10. Create new column: Time1   Group Years
+
+```{r echo=TRUE}
+
+FireClean <- FireClean %>%
+  mutate(Time1 = case_when(
+    Year <= 1995                 ~ "Early 90s",
+    Year >= 1996 & Year <= 2000  ~ "Late 90s",
+    Year >= 2001 & Year <= 2005  ~ "Early 10s",
+    Year >= 2006 & Year <= 2010  ~ "Late 10s",
+    Year >= 2011 & Year <= 2015  ~ "Early 20s",
+    Year >= 2016                 ~ "Late 20s"
+    )
+  )
+
+```
+11. Create new column: Time2   Group Years
+
+```{r echo=TRUE}
+
+FireClean <- FireClean %>%
+  mutate(Time2 = case_when(
+    Year >= 1990 & Year <= 1999  ~ "1990s",
+    Year >= 2000 & Year <= 2009  ~ "2000s",
+    Year >= 2010 & Year <= 2018  ~ "2010s"
+    )
+  )
+
+```
+12. Group Provinces into regions
+
+```{r echo=TRUE}
+
+FireClean <- FireClean %>% 
+  mutate(Region = case_when(
+    Jurisdiction %in% c("AB", "MB", "SK")           ~ "Prairie Region",
+    Jurisdiction %in% c("BC")                       ~ "Pacific Region",
+    Jurisdiction %in% c("NP")                       ~ "National Parks",
+    Jurisdiction %in% c("NB", "NL", "NS", "PE")     ~ "Atlantic Region",
+    Jurisdiction %in% c("ON", "QC")                 ~ "Central Region",
+    Jurisdiction %in% c("YT", "NT")                 ~ "North Region"
+      )
+  )
+
+```
+
+13. Check structure of attributes again.
+
+```{r echo=TRUE}
+
+attach(FireClean)
+
+head(FireClean)
+tail(FireClean)
+str(FireClean)
+dim(FireClean) # 11519 rows, 6 columns
+
+# Check data types of attributes
+sapply(FireClean, class)
+
+levels(FireClean$Cause)
+levels(FireClean$Jurisdiction)
+levels(FireClean$Protection.zone)
+levels(FireClean$Response.category)
+levels(FireClean$Year)
+summary(FireClean) # Only the "number" attribute maybe usefull with the summary
+summary(FireClean$Number) 
+summary(FireClean$Year) 
+
+```
+
+14. Visulization, Barplot, Boxplot
+
+```{r echo=TRUE, rows.print=30, cols.print=30}
+
+data <- tbl_df(FireClean)
+
+head(data)
+
+########################################################################################################################################
+#11 
+
+pivot3 <- data %>%
+select(Year, Number, Cause_Grouped)
+head(pivot3)
+
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Cause_Grouped, Number, Year, Jurisdiction) %>% 
+  filter(Jurisdiction == "BC") %>% 
+  group_by(Year, Cause_Grouped) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+
+pivot3 %>% 
+  spread(Year, sum_Number)
+
+############
+#SUMMING COLUMNS AND ROWS
+pivot4 <- pivot3 %>% 
+  spread(Year, sum_Number)
+
+pivot4
+
+pivot5 <- pivot4 %>%
+  adorn_totals("row") %>% 
+  adorn_totals("col") 
+
+pivot5
+
+##################################################
+# Test 1
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Year,
+                               y = sum_Number,
+                               color = Cause_Grouped)
+            ) +
+  geom_bar(stat="identity", width = 0.7, fill="white") +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  scale_x_continuous(breaks=1990:2018)+
+  #stat_summary(fun.y = sum, aes(label = ..y.., group = Year), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 5000))+
+  labs(title = "Causes of Forest Fires in BC (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 0 ,size = 9, angle = 90))
+
+########################################################################################################################################
+#10-B Practice sum column and rows
+
+pivot3 <- data %>%
+select(Region, Number, Cause_Grouped)
+head(pivot3)
+
+# attach(pivot3)
+# detach(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Region, Number, Cause_Grouped) %>% 
+  group_by(Cause_Grouped, Region) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+  
+pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+############
+#SUMMING COLUMNS AND ROWS
+pivot4 <- pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+pivot4
+
+pivot5 <- pivot4 %>%
+  adorn_totals("row") %>% 
+  adorn_totals("col") 
+
+pivot5
+
+##################################################
+#CORRELATION USE FOR pivot3 ONLY
+CorDataFrame <- pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+CorDataFrame
+sapply(CorDataFrame, is.numeric) # Which columns are numeric?
+
+my_num_data <- CorDataFrame[, sapply(CorDataFrame, is.numeric)] # Subset numeric columns
+my_num_data
+
+
+plot(my_num_data) # Works
+cor(my_num_data)
+
+
+##################################################
+
+# Test 1
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3,
+       aes(x = Region, y = sum_Number, color=Cause_Grouped)) +
+  geom_bar(position = "dodge", stat="identity", width = 0.7, fill="white") +
+  geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+                  vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 40000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 45))
+
+
+
+########################################################################################################################################
+#10 
+
+pivot3 <- data %>%
+select(Region, Number, Cause_Grouped)
+head(pivot3)
+
+# attach(pivot3)
+# detach(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Region, Number, Cause_Grouped) %>% 
+  group_by(Cause_Grouped, Region) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+
+pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+
+##################################################
+#CORRELATION
+CorDataFrame <- pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+CorDataFrame
+sapply(CorDataFrame, is.numeric) # Which columns are numeric?
+
+my_num_data <- CorDataFrame[, sapply(CorDataFrame, is.numeric)] # Subset numeric columns
+my_num_data
+
+
+plot(my_num_data) # Works
+cor(my_num_data)
+
+
+##################################################
+
+# Test 1
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3,
+       aes(x = Region, y = sum_Number, color=Cause_Grouped)) +
+  geom_bar(position = "dodge", stat="identity", width = 0.7, fill="white") +
+  geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+                  vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 40000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 45))
+
+########################################################################################################################################
+#9
+
+pivot3 <- data %>%
+select(Year, Number, Jurisdiction)
+head(pivot3)
+
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Year) %>% 
+  group_by(Year, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+
+pivot3 %>% 
+  spread(Year, sum_Number)
+
+#Produces matrix with zero
+pivot4 <- pivot3 %>% 
+  spread(Year, sum_Number)
+
+pivot4
+
+#Remove NAs from matrix, replace with zero
+pivot4[is.na(pivot4)] <- 0
+#Matrix now has NAs removed, now replaced with zero
+pivot4
+
+############
+#SUMMING COLUMNS AND ROWS
+
+pivot5 <- pivot4 %>%
+  adorn_totals("row") %>% 
+  adorn_totals("col") 
+
+pivot5
+
+##################################################
+# Test 4
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Year,
+                               y = sum_Number,
+                               color = Jurisdiction)
+            ) +
+  geom_line(stat="identity", width = 0.7, fill="white", size = 2) +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  scale_color_manual(values = c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7",
+                                "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442")) +
+  scale_x_continuous(breaks=1990:2018)+
+  #stat_summary(fun.y = sum, aes(label = ..y.., group = Year), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Year") +
+  ylab("Number of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 4500))+
+  labs(title = "Number of Forest Fires for each Province (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 0 ,size = 9, angle = 90))
+
+
+##################################################
+# Test 3
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Year,
+                               y = sum_Number,
+                               color = Jurisdiction)
+            ) +
+  geom_line(stat="identity", width = 0.7, fill="white", size = 2) +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  scale_x_continuous(breaks=1990:2018)+
+  #stat_summary(fun.y = sum, aes(label = ..y.., group = Year), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Year") +
+  ylab("Number of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 4500))+
+  labs(title = "Number of Forest Fires for each Province (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 0 ,size = 9, angle = 90))
+
+
+##################################################
+# Test 2
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Year,
+                               y = sum_Number,
+                               color = Jurisdiction)
+            ) +
+  geom_line(stat="identity", width = 0.7, fill="white") +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  scale_x_continuous(breaks=1990:2018)+
+  #stat_summary(fun.y = sum, aes(label = ..y.., group = Year), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Year") +
+  ylab("Number of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 4500))+
+  labs(title = "Number of Forest Fires for each Province (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 0 ,size = 9, angle = 90))
+
+
+########################################################################################################################################
+#8
+
+pivot3 <- data %>%
+select(Year, Number, Cause_Grouped)
+head(pivot3)
+
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Cause_Grouped, Number, Year) %>% 
+  group_by(Year, Cause_Grouped) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+
+pivot3 %>% 
+  spread(Year, sum_Number)
+
+##################################################
+# Test 8
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Year,
+                               y = sum_Number,
+                               color = Cause_Grouped)
+            ) +
+  geom_bar(stat="identity", width = 0.7, fill="white") +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  scale_x_continuous(breaks=1990:2018)+
+  #stat_summary(fun.y = sum, aes(label = ..y.., group = Year), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 12000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 0 ,size = 9, angle = 90))
+
+
+########################################################################################################################################
+#7
+
+pivot3 <- data %>%
+select(Jurisdiction, Number, Year)
+head(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Year) %>% 
+  group_by(Year, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+#Produces matrix with zero
+pivot4 <- pivot3 %>% 
+  spread(Year, sum_Number)
+
+pivot4
+
+#Remove NAs from matrix, replace with zero
+pivot4[is.na(pivot4)] <- 0
+#Matrix now has NAs removed, now replaced with zero
+pivot4
+
+############
+#SUMMING COLUMNS AND ROWS
+
+pivot5 <- pivot4 %>%
+  adorn_totals("row") %>% 
+  adorn_totals("col") 
+
+pivot5
+
+##################################################
+
+boxplot(sum_Number~Year,
+  data=pivot3,
+  main="Distribution of number of fires for all Provinces per year \n(1990 - 2018)",
+  xlab="Year",
+  ylab="Number of Fires",
+  col=c("blue", "indianred1","red","orange","purple","green",
+    "pink","brown", "mediumpurple2","olivedrab1"),
+  border="black"
+)
+
+
+########################################################################################################################################
+#6 Boxplot
+pivot3 <- data %>%
+select(Jurisdiction, Number, Year)
+head(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Year) %>% 
+  group_by(Year, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+
+pivot3 %>% 
+  spread(Jurisdiction, sum_Number)
+
+#Produces matrix with zero
+pivot4 <- pivot3 %>% 
+  spread(Jurisdiction, sum_Number)
+
+pivot4
+
+#Remove NAs from matrix, replace with zero
+pivot4[is.na(pivot4)] <- 0
+#Matrix now has NAs removed, now replaced with zero
+pivot4
+
+############
+#SUMMING COLUMNS AND ROWS
+
+pivot5 <- pivot4 %>%
+  adorn_totals("row") %>% 
+  adorn_totals("col") 
+
+pivot5
+
+##################################################
+
+
+##################################################
+#CORRELATION
+CorDataFrame <- pivot3 %>% 
+  spread(Jurisdiction, sum_Number)
+
+
+CorDataFrame
+sapply(CorDataFrame, is.numeric) # Which columns are numeric?
+
+my_num_data <- CorDataFrame[, sapply(CorDataFrame, is.numeric)] # Subset numeric columns
+my_num_data
+
+
+plot(my_num_data) # Works
+cor(my_num_data)
+
+##################################################
+# Test 1
+
+boxplot(sum_Number~Jurisdiction,
+  data=pivot3,
+  main="Distribution of number of fires in each Province per year \n(1990 - 2018)",
+  xlab="Provinces",
+  ylab="Number of Fires",
+  col=c("blue", "indianred1","red","orange","purple","green",
+    "pink","brown", "mediumpurple2","olivedrab1"),
+  border="black"
+)
+
+##################################################
+
+########################################################################################################################################
+#5 Boxplot
+
+pivot3 <- data %>%
+select(Jurisdiction, Number, Cause_Grouped)
+head(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Cause_Grouped) %>% 
+  group_by(Cause_Grouped, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+
+
+##################################################
+
+# Test 2
+  
+
+boxplot(sum_Number~Cause_Grouped,
+  data=pivot3,
+  main="Distribution of number of fires in each Province for each cause \n(1990 - 2018)",
+  xlab="Cause",
+  ylab="Number of Fires",
+  col=c("blue", "indianred1","red","orange","purple","green",
+    "pink","brown", "mediumpurple2","olivedrab1"),
+  border="black"
+)
+
+########################################################################################################################################
+#4
+
+pivot3 <- data %>%
+select(Jurisdiction, Number, Cause_Grouped)
+head(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Cause_Grouped) %>% 
+  group_by(Cause_Grouped, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+
+##################################################
+# Test 5
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3, aes(x = Jurisdiction,
+                               y = sum_Number,
+                               color = Cause_Grouped)
+            ) +
+  geom_bar(stat="identity", width = 0.7, fill="white") +
+  # geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+  #                 vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  stat_summary(fun.y = sum, aes(label = ..y.., group = Jurisdiction), geom = "text", vjust= -1.5, show_guide = F)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 60000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 0))
+
+
+########################################################################################################################################
+#3
+pivot3 <- data %>%
+select(Jurisdiction, Number, Cause_Grouped)
+head(pivot3)
+
+# attach(pivot3)
+# detach(pivot3)
+
+pivot3 <- data %>% #Groups Cause together and sums Number
+  select(Jurisdiction, Number, Cause_Grouped) %>% 
+  group_by(Cause_Grouped, Jurisdiction) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) 
+  
+pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+
+##################################################
+#CORRELATION
+CorDataFrame <- pivot3 %>% 
+  spread(Cause_Grouped, sum_Number)
+
+CorDataFrame
+sapply(CorDataFrame, is.numeric) # Which columns are numeric?
+
+my_num_data <- CorDataFrame[, sapply(CorDataFrame, is.numeric)] # Subset numeric columns
+my_num_data
+
+
+plot(my_num_data) # Works
+cor(my_num_data)
+
+
+##################################################
+
+# Test 11
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+
+p <- ggplot(data = pivot3,
+       aes(x = Jurisdiction, y = sum_Number, color=Cause_Grouped)) +
+  geom_bar(position = "dodge", stat="identity", width = 0.7, fill="white") +
+  geom_text_repel(aes(label=sum_Number), show_guide = F, position=position_dodge(width=0.4),
+                  vjust= -2.4, hjust = 0.4, size = 3.8, angle = 0)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 40000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 0))
+
+########################################################################################################################################
+#2
+#Below works with percentage totals
+GCause_HvsL <- data %>% #Groups Cause together and sums Number
+  group_by(Cause_Grouped) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) %>% 
+  mutate(rel.freq = paste0(round(100 * sum_Number/sum(sum_Number),0),"%"))
+
+GCause_HvsL
+
+##################################################
+
+# Boxplot GCause 11, testing
+  
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+p <- ggplot(data = GCause_HvsL,
+       aes(x = Cause_Grouped, y = sum_Number, color=Cause_Grouped)) +
+  geom_bar(stat="identity", width = 0.3, fill="white") +
+  geom_text(aes(label=sum_Number), position=position_dodge(width=0.9), vjust=-0.15)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 125000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 45), legend.position = "none")
+
+########################################################################################################################################
+#1
+#Below works with percentage totals
+GCause <- data %>% #Groups Cause together and sums Number
+  group_by(Cause) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) %>% 
+  mutate(rel.freq = paste0(round(100 * sum_Number/sum(sum_Number),0),"%"))
+
+GCause
+
+##################################################
+
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x) }
+
+p <- ggplot(data = GCause,
+       aes(x = Cause, y = sum_Number, color=Cause)) +
+  geom_bar(stat="identity", fill="white") +
+  geom_text(aes(label=sum_Number), position=position_dodge(width=0.9), vjust=-0.15)+
+  xlab("Cause") +
+  ylab("Causes of Forest Fires (1990 - 2018)") +
+  scale_y_continuous(name="Sum of Forest Fires", labels = ks)+
+  coord_cartesian(ylim = c(0, 105000))+
+  labs(title = "Causes of Forest Fires (1990 - 2018)")
+
+p
+p + theme(
+  axis.text.x = element_text(face = "bold", color = "#993333", hjust = 1,size = 9, angle = 45), legend.position = "none")
+
+########################################################################################################################################
+
+#Sample code for various statistics
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Cause, Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#Below code works
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Cause, Jurisdiction, Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#Below code works
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Jurisdiction, Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#Below code works
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Year, Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#Below code works
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#Below code works
+data %>% #Groups Cause, Year together and sums Number
+  group_by(Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))    
+
+#######################################################
+#Below code works
+data %>% #Groups Cause, Year, Jurisdiction and sums Number
+  group_by(Cause, Year, Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) %>% 
+  filter(Jurisdiction == "BC") %>%
+  filter(Cause == "Lightning")
+
+#Below code works
+data %>% #Groups Cause together and sums Number
+  group_by(Cause, Year, Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE)) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning")
+
+#Below works great, show max number of fires and year for Alberta
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  top_n(n=1) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning") 
+
+#Below works great, Top 10 years for Lightning in Alberta
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  top_n(n=10) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning") %>% 
+  arrange(desc(max_Number))
+
+#Below works great, Top 10 years for Lightning in Alberta
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  top_n(n=10) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning")
+  
+#Below works great, Top 10 years for Lightning in Alberta
+Alberta <- data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  top_n(n=10) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning")
+
+Alberta
+
+hist(Alberta$Year)
+hist(Alberta$max_Number)
+
+#Below works
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning") %>% 
+  filter(Year > "2003")
+  
+#Below works, Top 10 after 2003
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning") %>% 
+  filter(Year > "2003") %>% 
+  arrange(desc(max_Number))
+
+data %>% 
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+
+#Below works, Top 10 after 2003
+data %>% #Groups Cause together and sums Number
+  group_by(Jurisdiction, Cause, Year) %>% 
+  summarize(max_Number = max(Number, na.rm = TRUE)) %>% 
+  filter(Jurisdiction == "AB") %>%
+  filter(Cause == "Lightning") %>% 
+  filter(Year > "2003") %>% 
+  arrange(desc(max_Number))
+
+################################################
+
+data %>% #Groups Cause together and sums Number.  Also provides avg for Number of fires.
+  group_by(Cause) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE),
+    count = n(),
+    average_fire = mean(Number, na.rm = TRUE))
+
+data %>% #Groups Cause together and sums Number.  Also provides avg for Number of fires.
+  group_by(Cause) %>% 
+  summarize(
+    sum_Number = sum(Number, na.rm = TRUE),
+    count = n(),
+    average_fire = mean(Number, na.rm = TRUE),
+    total = sum(sum_Number)
+    )
+
+data %>% #Groups Year and sums Number
+  group_by(Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% #Groups Jurisdiction and sums Number
+  group_by(Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% 
+  group_by(Year) %>%
+  group_by(Jurisdiction) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% 
+  group_by(Jurisdiction) %>%
+  group_by(Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% 
+  group_by(Jurisdiction) %>%
+  group_by(Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% 
+  group_by(Jurisdiction) %>%
+  group_by(Year) %>% 
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+data %>% 
+  group_by(Jurisdiction, Cause, Year) %>%
+  summarize(sum_Number = sum(Number, na.rm = TRUE))
+
+###################
+
+
+```
+
+.Misc code to be entered.
+
+```{r echo=TRUE}
+
+
+```
